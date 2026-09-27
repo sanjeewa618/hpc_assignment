@@ -1,183 +1,194 @@
+
 #include <iostream>
 #include <vector>
 #include <chrono>
-#include <cstdint>
 #include <algorithm>
 
 using namespace std;
 using namespace chrono;
 
-// Calculate the next generation
-inline void nextGeneration(
-    const vector<uint8_t>& current,
-    vector<uint8_t>& next,
-    int rows,
-    int cols)
+
+// --------------------------------------------------
+// Count alive neighbours
+// --------------------------------------------------
+inline int countNeighbors(const vector<unsigned char>& grid,
+                          int rows,
+                          int cols,
+                          int row,
+                          int col)
 {
-    // +2 because we keep a dead border around the grid
-    int stride = cols + 2;
+    int count = 0;
 
-    for (int i = 1; i <= rows; i++)
+    for (int i = row - 1; i <= row + 1; i++)
     {
-        int base = i * stride;
+        // Skip rows outside the grid
+        if (i < 0 || i >= rows)
+            continue;
 
-        for (int j = 1; j <= cols; j++)
+        for (int j = col - 1; j <= col + 1; j++)
         {
-            int idx = base + j;
+            // Skip columns outside the grid
+            if (j < 0 || j >= cols)
+                continue;
 
-            // Count 8 neighbours
-            int neighbours =
-                current[idx - stride - 1] +
-                current[idx - stride] +
-                current[idx - stride + 1] +
-                current[idx - 1] +
-                current[idx + 1] +
-                current[idx + stride - 1] +
-                current[idx + stride] +
-                current[idx + stride + 1];
+            // Do not count the current cell
+            if (i == row && j == col)
+                continue;
 
-            // Game of Life rules
-            if (current[idx] == 1)
+            count += grid[i * cols + j];
+        }
+    }
+
+    return count;
+}
+
+
+// --------------------------------------------------
+// Calculate next generation
+// --------------------------------------------------
+void nextGeneration(const vector<unsigned char>& grid,
+                    vector<unsigned char>& nextGrid,
+                    int rows,
+                    int cols)
+{
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            int neighbors =
+                countNeighbors(grid, rows, cols, i, j);
+
+            int index = i * cols + j;
+
+            // Current cell is alive
+            if (grid[index] == 1)
             {
-                // Alive cell survives with 2 or 3 neighbours
-                next[idx] = (neighbours == 2 || neighbours == 3) ? 1 : 0;
+                // Survives with 2 or 3 neighbours
+                nextGrid[index] =
+                    (neighbors == 2 || neighbors == 3) ? 1 : 0;
             }
+
+            // Current cell is dead
             else
             {
-                // Dead cell becomes alive with exactly 3 neighbours
-                next[idx] = (neighbours == 3) ? 1 : 0;
+                // Becomes alive with exactly 3 neighbours
+                nextGrid[index] =
+                    (neighbors == 3) ? 1 : 0;
             }
         }
     }
 }
 
 
-// Initialize the grid
-void initializeGrid(
-    vector<uint8_t>& grid,
-    int rows,
-    int cols)
+// --------------------------------------------------
+// Initialize grid
+// --------------------------------------------------
+void initializeGrid(vector<unsigned char>& grid,
+                    int rows,
+                    int cols)
 {
-    int stride = cols + 2;
-
     // Start with all cells dead
     fill(grid.begin(), grid.end(), 0);
 
-    // Create a small blinker pattern in the middle
-    int r = rows / 2 + 1;
-    int c = cols / 2 + 1;
+    // Create a blinker pattern in the middle
+    int centerRow = rows / 2;
+    int centerCol = cols / 2;
 
-    grid[(r - 1) * stride + c] = 1;
-    grid[r * stride + c] = 1;
-    grid[(r + 1) * stride + c] = 1;
+    grid[centerRow * cols + centerCol] = 1;
+    grid[(centerRow - 1) * cols + centerCol] = 1;
+    grid[(centerRow + 1) * cols + centerCol] = 1;
 }
 
 
-// Run Game of Life and return execution time
-long long runGame(
-    int rows,
-    int cols,
-    int iterations)
+// --------------------------------------------------
+// Main function
+// --------------------------------------------------
+int main()
 {
-    int stride = cols + 2;
+    // Grid size
+    const int ROWS = 1000;
+    const int COLS = 1000;
 
-    // Continuous memory
-    vector<uint8_t> grid(
-        (rows + 2) * stride, 0);
+    // Number of iterations
+    const int ITERATIONS = 100;
 
-    vector<uint8_t> nextGrid(
-        (rows + 2) * stride, 0);
 
-    initializeGrid(grid, rows, cols);
+    // --------------------------------------------------
+    // Allocate two grids
+    // --------------------------------------------------
+
+    vector<unsigned char> grid(ROWS * COLS);
+    vector<unsigned char> nextGrid(ROWS * COLS);
+
+
+    // --------------------------------------------------
+    // Initialize grid
+    // --------------------------------------------------
+
+    initializeGrid(grid, ROWS, COLS);
+
+
+    // --------------------------------------------------
+    // Start timer
+    // --------------------------------------------------
 
     auto start = high_resolution_clock::now();
 
-    // Run 100 generations
+
+    // --------------------------------------------------
+    // Run Game of Life
+    // --------------------------------------------------
+
     for (int iteration = 0;
-         iteration < iterations;
+         iteration < ITERATIONS;
          iteration++)
     {
+        // Calculate next generation
         nextGeneration(
             grid,
             nextGrid,
-            rows,
-            cols);
+            ROWS,
+            COLS
+        );
 
-        // Swap instead of copying the whole grid
+        // Swap grids instead of copying
         grid.swap(nextGrid);
     }
 
+
+    // --------------------------------------------------
+    // Stop timer
+    // --------------------------------------------------
+
     auto end = high_resolution_clock::now();
 
-    // Calculate checksum so compiler cannot remove the calculation
-    long long aliveCells = 0;
 
-    for (int i = 1; i <= rows; i++)
-    {
-        for (int j = 1; j <= cols; j++)
-        {
-            aliveCells +=
-                grid[i * stride + j];
-        }
-    }
-
-    cout << "Final alive cells: "
-         << aliveCells << endl;
-
-    return duration_cast<milliseconds>(
-        end - start).count();
-}
+    // Calculate execution time
+    auto duration =
+        duration_cast<milliseconds>(end - start);
 
 
-int main()
-{
-    const int ITERATIONS = 100;
-    const int REPEATS = 3;
+    // --------------------------------------------------
+    // Display results
+    // --------------------------------------------------
 
-    // Test different grid sizes
-    int sizes[] = {
-        1000,
-        1024,
-        2048
-    };
+    cout << "====================================" << endl;
+    cout << "     Optimized CPU Game of Life" << endl;
+    cout << "====================================" << endl;
 
-    cout << "====================================\n";
-    cout << "Optimized CPU Game of Life\n";
-    cout << "====================================\n";
+    cout << "Grid Size       : "
+         << ROWS << " x " << COLS << endl;
 
-    for (int size : sizes)
-    {
-        cout << "\nGrid Size: "
-             << size << " x " << size << endl;
+    cout << "Iterations      : "
+         << ITERATIONS << endl;
 
-        long long totalTime = 0;
+    cout << "Execution Time  : "
+         << duration.count()
+         << " milliseconds" << endl;
 
-        for (int run = 1;
-             run <= REPEATS;
-             run++)
-        {
-            cout << "Run " << run << ": ";
+    cout << "====================================" << endl;
 
-            long long time =
-                runGame(
-                    size,
-                    size,
-                    ITERATIONS);
-
-            cout << "Execution Time: "
-                 << time << " ms"
-                 << endl;
-
-            totalTime += time;
-        }
-
-        double average =
-            totalTime / (double)REPEATS;
-
-        cout << "Average Time: "
-             << average << " ms"
-             << endl;
-    }
 
     return 0;
 }
+
